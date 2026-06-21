@@ -2,10 +2,10 @@ name: Android CI (Build APK)
 
 on:
   push:
-    branches: [ "main", "master" ] # سيعمل البناء تلقائياً عند الرفع على فرع main أو master
+    branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # يتيح لك زر "Run workflow" لتشغيل البناء يدوياً من موقع GitHub في أي وقت
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,17 +20,19 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
-          cache: 'gradle' # تسريع البناء في المرات القادمة عبر كاش Gradle
+          cache: 'gradle'
 
       - name: Make Gradlew Executable
         run: chmod +x gradlew
 
-      - name: Build Normal Debug APK
-        run: ./gradlew clean assembleNormalDebug
+      # تم تعديل هذا السطر لتحديد النسخة بدقة
+      - name: Build Normal NoRecord Debug APK
+        run: ./gradlew clean assembleNormalNoRecordDebug
 
+      # تم تعديل مسار المجلد ليطابق النسخة الجديدة
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Adawati-Game-APK # اسم الملف الذي سيظهر لك في موقع قيت هب للتحميل
-          path: app/build/outputs/apk/normal/debug/*.apk
-          retention-days: 7 # مدة الاحتفاظ بالملف للتحميل (7 أيام)
+          name: Adawati-Game-APK
+          path: app/build/outputs/apk/normalNoRecord/debug/*.apk
+          retention-days: 7

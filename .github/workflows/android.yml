@@ -1,0 +1,36 @@
+name: Android CI (Build APK)
+
+on:
+  push:
+    branches: [ "main", "master" ] # سيعمل البناء تلقائياً عند الرفع على فرع main أو master
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # يتيح لك زر "Run workflow" لتشغيل البناء يدوياً من موقع GitHub في أي وقت
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle' # تسريع البناء في المرات القادمة عبر كاش Gradle
+
+      - name: Make Gradlew Executable
+        run: chmod +x gradlew
+
+      - name: Build Normal Debug APK
+        run: ./gradlew clean assembleNormalDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adawati-Game-APK # اسم الملف الذي سيظهر لك في موقع قيت هب للتحميل
+          path: app/build/outputs/apk/normal/debug/*.apk
+          retention-days: 7 # مدة الاحتفاظ بالملف للتحميل (7 أيام)

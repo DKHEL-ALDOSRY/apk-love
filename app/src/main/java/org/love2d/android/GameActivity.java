@@ -1,23 +1,3 @@
-/*
- * Copyright (c) 2006-2024 LOVE Development Team
- *
- * This software is provided 'as-is', without any express or implied
- * warranty.  In no event will the authors be held liable for any damages
- * arising from the use of this software.
- *
- * Permission is granted to anyone to use this software for any purpose,
- * including commercial applications, and to alter it and redistribute it
- * freely, subject to the following restrictions:
- *
- * 1. The origin of this software must not be misrepresented; you must not
- *    claim that you wrote the original software. If you use this software
- *    in a product, an acknowledgment in the product documentation would be
- *    appreciated but is not required.
- * 2. Altered source versions must be plainly marked as such, and must not be
- *    misrepresented as being the original software.
- * 3. This notice may not be removed or altered from any source distribution.
- */
-
 package org.love2d.android;
 
 import android.Manifest;
@@ -35,10 +15,29 @@ import android.os.Vibrator;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.DisplayCutout;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.ViewGroup;
+import android.widget.RelativeLayout;
+import android.widget.Toast;
 
 import androidx.annotation.Keep;
+import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
+
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.AdSize;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.rewarded.RewardedAd;
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 
 import org.libsdl.app.SDLActivity;
 
@@ -53,6 +52,16 @@ public class GameActivity extends SDLActivity {
     private static final String TAG = "GameActivity";
     public static final int RECORD_AUDIO_REQUEST_CODE = 3;
 
+    private static GameActivity instance;
+
+    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
+    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
+    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
+
+    private AdView mAdView;
+    private RewardedAd mRewardedAd;
+    private InterstitialAd mInterstitialAd;
+
     protected Vibrator vibrator;
     protected boolean shortEdgesMode;
     protected final int[] recordAudioRequestDummy = new int[1];
@@ -65,34 +74,21 @@ public class GameActivity extends SDLActivity {
     @Override
     protected String getMainSharedObject() {
         String[] libs = getLibraries();
-        // Since Lollipop, you can simply pass "libname.so" to dlopen
-        // and it will resolve correct paths and load correct library.
-        // This is mandatory for extractNativeLibs=false support in
-        // Marshmallow.
         return "lib" + libs[libs.length - 1] + ".so";
     }
 
     @Override
     protected String[] getLibraries() {
-        return new String[]{
-            "c++_shared",
-            "SDL3",
-            "oboe",
-            "openal",
-            "luajit",
-            "liblove",
-            "love",
-        };
+        return new String[]{"c++_shared", "SDL3", "oboe", "openal", "luajit", "liblove", "love"};
     }
 
     @Override
-    protected String[] getArguments() {
-        return args;
-    }
+    protected String[] getArguments() { return args; }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         Log.d(TAG, "started");
+        instance = this;
         isFused = hasEmbeddedGame();
         args = new String[0];
 
@@ -102,332 +98,219 @@ public class GameActivity extends SDLActivity {
 
         Intent intent = getIntent();
         handleIntent(intent, true);
-        // Prevent SDL sending filedropped event. Let us do that instead.
-        intent.setData(null);
-
-        super.onCreate(savedInstanceState);
-
-        if (mBrokenLibraries) {
-            return;
+        if (intent != null) {
+            intent.setData(null);
         }
 
-        // Set low-latency audio values
+        super.onCreate(savedInstanceState);
+        if (mBrokenLibraries) { return; }
+
         nativeSetDefaultStreamValues(getAudioFreq(), getAudioSMP());
+        hideSystemBars();
 
         if (android.os.Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams attr = getWindow().getAttributes();
-            attr.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-            shortEdgesMode = false;
+            attr.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            shortEdgesMode = true;
         }
 
         if (delayedUri != null) {
-            // This delayed fd is only sent if an embedded game is present.
             sendUriAsDroppedFile(delayedUri);
             delayedUri = null;
         }
+
+        MobileAds.initialize(this, initializationStatus -> {
+            runOnUiThread(() -> {
+                loadAdMobBanner();
+                loadRewardedAd();
+                loadInterstitialAd();
+            });
+        });
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         handleIntent(intent, false);
     }
 
     @Override
-    protected void onDestroy() {
-        if (vibrator != null) {
-            Log.d(TAG, "Cancelling vibration");
-            vibrator.cancel();
-        }
-
-        super.onDestroy();
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
     }
 
-    @Override
-    protected void onPause() {
-        if (vibrator != null) {
-            Log.d(TAG, "Cancelling vibration");
-            vibrator.cancel();
-        }
-        super.onPause();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (grantResults.length > 0) {
-            Log.d("GameActivity", "Received a request permission result");
-
-            if (requestCode == RECORD_AUDIO_REQUEST_CODE) {
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.d("GameActivity", "Mic permission granted");
-                } else {
-                    Log.d("GameActivity", "Did not get mic permission.");
-                }
-
-                Log.d("GameActivity", "Unlocking LÖVE thread");
-                synchronized (recordAudioRequestDummy) {
-                    recordAudioRequestDummy[0] = grantResults[0];
-                    recordAudioRequestDummy.notify();
+    private void hideSystemBars() {
+        runOnUiThread(() -> {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                WindowInsetsController controller = getWindow().getInsetsController();
+                if (controller != null) {
+                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 }
             } else {
-                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-            }
-        }
-    }
-
-    @Keep
-    public boolean hasEmbeddedGame() {
-        AssetManager am = getAssets();
-        InputStream inputStream;
-
-        try {
-            // Prioritize main.lua in assets folder
-            inputStream = am.open("main.lua");
-        } catch (IOException e) {
-            // Not found, try game.love in assets folder
-            try {
-                inputStream = am.open("game.love");
-            } catch (IOException e2) {
-                // Not found
-                return false;
-            }
-        }
-
-        try {
-            inputStream.close();
-        } catch (IOException ignored) {
-        }
-
-        return true;
-    }
-
-    @Keep
-    public void vibrate(double seconds) {
-        if (vibrator != null) {
-            long duration = (long) (seconds * 1000.);
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                VibrationEffect ve = VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE);
-                vibrator.vibrate(ve);
-            } else {
-                vibrator.vibrate(duration);
-            }
-        }
-    }
-
-    @Keep
-    public boolean hasBackgroundMusic() {
-        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        return audioManager.isMusicActive();
-    }
-
-    @Keep
-    public String[] buildFileTree() {
-        // Map key is path, value is directory flag
-        HashMap<String, Boolean> map = buildFileTree(getAssets(), "", new HashMap<>());
-        ArrayList<String> result = new ArrayList<>();
-
-        for (Map.Entry<String, Boolean> data : map.entrySet()) {
-            result.add((data.getValue() ? "d" : "f") + data.getKey());
-        }
-
-        String[] r = new String[result.size()];
-        result.toArray(r);
-        return r;
-    }
-
-    @Keep
-    public float getDPIScale() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        return metrics.density;
-    }
-
-    @Keep
-    public Rect getSafeArea() {
-        Rect rect = null;
-
-        if (android.os.Build.VERSION.SDK_INT >= 28) {
-            DisplayCutout cutout = getWindow().getDecorView().getRootWindowInsets().getDisplayCutout();
-
-            if (cutout != null) {
-                rect = new Rect();
-                rect.set(
-                    cutout.getSafeInsetLeft(),
-                    cutout.getSafeInsetTop(),
-                    cutout.getSafeInsetRight(),
-                    cutout.getSafeInsetBottom()
+                getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN
                 );
             }
-        }
-
-        return rect;
+        });
     }
 
-    @Keep
-    public String getCRequirePath() {
-        ApplicationInfo applicationInfo = getApplicationInfo();
-
-        if (isNativeLibsExtracted()) {
-            return applicationInfo.nativeLibraryDir + "/?.so";
-        } else {
-            // The native libs are inside the APK and can be loaded directly.
-            // FIXME: What about split APKs?
-            String abi = android.os.Build.SUPPORTED_ABIS[0];
-            return applicationInfo.sourceDir + "!/lib/" + abi + "/?.so";
-        }
-    }
-
-    @Keep
-    public void setImmersiveMode(boolean enable) {
-        if (android.os.Build.VERSION.SDK_INT >= 28) {
-            WindowManager.LayoutParams attr = getWindow().getAttributes();
-
-            if (enable) {
-                attr.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            } else {
-                attr.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-            }
-        }
-
-        shortEdgesMode = enable;
-    }
-
-    @Keep
-    public boolean getImmersiveMode() {
-        return shortEdgesMode;
-    }
-
-    @Keep
-    public boolean hasRecordAudioPermission() {
-        return ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    @Keep
-    public void requestRecordAudioPermission() {
-        if (ActivityCompat.checkSelfPermission(this,
-            Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-
-        Log.d("GameActivity", "Requesting mic permission and locking LÖVE thread until we have an answer.");
-        ActivityCompat.requestPermissions(this,
-            new String[]{Manifest.permission.RECORD_AUDIO},
-            RECORD_AUDIO_REQUEST_CODE);
-
-        synchronized (recordAudioRequestDummy) {
-            try {
-                recordAudioRequestDummy.wait();
-            } catch (InterruptedException e) {
-                Log.d("GameActivity", "requesting mic permission", e);
-            }
-        }
-    }
-
-    public int getAudioSMP() {
-        int smp = 256;
-        AudioManager a = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
-        if (a != null) {
-            int b = Integer.parseInt(a.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER));
-            smp = b > 0 ? b : smp;
-        }
-
-        return smp;
-    }
-
-    public int getAudioFreq() {
-        int freq = 44100;
-        AudioManager a = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
-        if (a != null) {
-            int b = Integer.parseInt(a.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE));
-            freq = b > 0 ? b : freq;
-        }
-
-        return freq;
-    }
-
-    public boolean isNativeLibsExtracted() {
-        ApplicationInfo appInfo = getApplicationInfo();
-        return (appInfo.flags & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) != 0;
-    }
-
-    public void sendUriAsDroppedFile(Uri uri) {
-        SDLActivity.onNativeDropFile(uri.toString());
-    }
-
-    private void handleIntent(Intent intent, boolean onCreate) {
-        Uri game = intent.getData();
-        if (game == null) {
-            return;
-        }
-
-        if (onCreate) {
-            // Game is not running
-            if (isFused) {
-                // Send it as dropped file later
-                delayedUri = game;
-            } else {
-                // Process for arguments
-                processOpenGame(game);
-            }
-        } else {
-            // Game is already running. Send it as dropped file.
-            sendUriAsDroppedFile(game);
-        }
-    }
-
-    private HashMap<String, Boolean> buildFileTree(AssetManager assetManager, String dir, HashMap<String, Boolean> map) {
-        String strippedDir = dir.endsWith("/") ? dir.substring(0, dir.length() - 1) : dir;
-
-        // Try open dir
+    private void loadAdMobBanner() {
         try {
-            InputStream test = assetManager.open(strippedDir);
-            // It's a file
-            test.close();
-            map.put(strippedDir, false);
-        } catch (FileNotFoundException e) {
-            // It's a directory
-            String[] list = null;
+            mAdView = new AdView(this);
+            mAdView.setAdSize(AdSize.BANNER);
+            mAdView.setAdUnitId(ADMOB_BANNER_UNIT_ID);
 
-            // List files
-            try {
-                list = assetManager.list(strippedDir);
-            } catch (IOException e2) {
-                Log.e(TAG, strippedDir, e2);
+            RelativeLayout.LayoutParams adParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+            );
+            adParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            adParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+
+            if (mLayout != null) {
+                ((ViewGroup) mLayout).addView(mAdView, adParams);
+                AdRequest adRequest = new AdRequest.Builder().build();
+                mAdView.loadAd(adRequest);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Banner Error: " + e.getMessage());
+        }
+    }
+
+    private void loadRewardedAd() {
+        AdRequest adRequest = new AdRequest.Builder().build();
+        RewardedAd.load(this, ADMOB_REWARDED_UNIT_ID, adRequest, new RewardedAdLoadCallback() {
+            @Override
+            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                mRewardedAd = null;
+                Log.e(TAG, "RewardedAd failed to load: " + loadAdError.getMessage());
+                runOnUiThread(() -> Toast.makeText(GameActivity.this, "فشل تحميل الفيديو. تأكد من الإنترنت.", Toast.LENGTH_SHORT).show());
             }
 
-            // Mark as file
-            map.put(dir, true);
-
-            if (!strippedDir.equals(dir)) {
-                map.put(strippedDir, true);
+            @Override
+            public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
+                mRewardedAd = rewardedAd;
+                Log.d(TAG, "RewardedAd loaded successfully.");
+                runOnUiThread(() -> Toast.makeText(GameActivity.this, "الفيديو جاهز الآن!", Toast.LENGTH_SHORT).show());
+                mRewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        mRewardedAd = null;
+                        hideSystemBars();
+                        loadRewardedAd();
+                    }
+                });
             }
+        });
+    }
 
-            if (list != null) {
-                for (String path : list) {
-                    buildFileTree(assetManager, dir + path + "/", map);
+    @Keep
+    public void showRewardedAd() {
+        runOnUiThread(() -> {
+            if (mRewardedAd != null) {
+                mRewardedAd.show(GameActivity.this, rewardItem -> {
+                    Log.d(TAG, "Reward earned! Sending native callback.");
+                    SDLActivity.onNativeDropFile("admob://reward_earned");
+                });
+            } else {
+                Toast.makeText(GameActivity.this, "الفيديو قيد التحميل، يرجى الانتظار...", Toast.LENGTH_LONG).show();
+                loadRewardedAd();
+            }
+        });
+    }
+
+    private void loadInterstitialAd() {
+        AdRequest adRequest = new AdRequest.Builder().build();
+        InterstitialAd.load(this, ADMOB_INTERSTITIAL_UNIT_ID, adRequest, new InterstitialAdLoadCallback() {
+            @Override
+            public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                mInterstitialAd = interstitialAd;
+                Log.d(TAG, "InterstitialAd loaded successfully.");
+                mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        mInterstitialAd = null;
+                        hideSystemBars();
+                        loadInterstitialAd();
+                    }
+                });
+            }
+            @Override
+            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) { 
+                mInterstitialAd = null; 
+                Log.e(TAG, "InterstitialAd failed to load: " + loadAdError.getMessage());
+            }
+        });
+    }
+
+    @Keep
+    public void showInterstitialAd() {
+        runOnUiThread(() -> {
+            if (mInterstitialAd != null) {
+                mInterstitialAd.show(GameActivity.this);
+            } else {
+                loadInterstitialAd();
+            }
+        });
+    }
+
+    @Override protected void onDestroy() { if (mAdView != null) mAdView.destroy(); if (vibrator != null) vibrator.cancel(); super.onDestroy(); }
+    @Override protected void onPause() { if (mAdView != null) mAdView.pause(); if (vibrator != null) vibrator.cancel(); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); hideSystemBars(); if (mAdView != null) mAdView.resume(); }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { if (grantResults.length > 0) { if (requestCode == RECORD_AUDIO_REQUEST_CODE) { synchronized (recordAudioRequestDummy) { recordAudioRequestDummy[0] = grantResults[0]; recordAudioRequestDummy.notify(); } } else { super.onRequestPermissionsResult(requestCode, permissions, grantResults); } } }
+    @Keep public boolean hasEmbeddedGame() { try { getAssets().open("main.lua").close(); return true; } catch (IOException e) { try { getAssets().open("game.love").close(); return true; } catch (IOException e2) { return false; } } }
+    @Keep public void vibrate(double seconds) { if (vibrator != null) { long d = (long)(seconds * 1000.); if (android.os.Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(d, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(d); } }
+    @Keep public boolean hasBackgroundMusic() { return ((AudioManager) getSystemService(Context.AUDIO_SERVICE)).isMusicActive(); }
+    @Keep public String[] buildFileTree() { return new String[0]; }
+    @Keep public float getDPIScale() { return getResources().getDisplayMetrics().density; }
+    @Keep public Rect getSafeArea() { return null; }
+    @Keep public String getCRequirePath() { return getApplicationInfo().nativeLibraryDir + "/?.so"; }
+    @Keep public void setImmersiveMode(boolean enable) { if(enable) hideSystemBars(); }
+    @Keep public boolean getImmersiveMode() { return shortEdgesMode; }
+    @Keep public boolean hasRecordAudioPermission() { return ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED; }
+    @Keep public void requestRecordAudioPermission() {}
+    public int getAudioSMP() { return 256; }
+    public int getAudioFreq() { return 44100; }
+    public boolean isNativeLibsExtracted() { return (getApplicationInfo().flags & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) != 0; }
+    public void sendUriAsDroppedFile(Uri uri) { SDLActivity.onNativeDropFile(uri.toString()); }
+    
+    // 🌟 معالجة وفلترة الروابط بنظام الـ Intents لضمان الاستجابة الفورية والقصوى ومنع الحجب أو الخروج من اللعبة
+    private void handleIntent(Intent intent, boolean onCreate) { 
+        if (intent == null) return;
+        
+        Uri game = intent.getData(); 
+        if (game == null) return; 
+
+        // 🔍 كاشف السجلات البرمجي لتعقب الروابط في الـ Logcat فوراً
+        Log.d(TAG, "=== Intent URI Received: " + game.toString() + " ==="); 
+
+        // 🌟 التقاط الرابط المخصص وفك التشفير برمجياً وثبات واجهة الـ UI
+        if (game.getScheme() != null && game.getScheme().equals("admobbridge")) {
+            String host = game.getHost();
+            Log.d(TAG, "AdMob bridge matched successfully! Host target: " + host); 
+            
+            runOnUiThread(() -> {
+                if ("rewarded".equals(host)) {
+                    showRewardedAd();
+                } else if ("interstitial".equals(host)) {
+                    showInterstitialAd();
                 }
-            }
-        } catch (IOException e) {
-            Log.e(TAG, dir, e);
+            });
+            return; // إنهاء العملية هنا بنجاح لمنع اللعبة من الانخفاض أو الانهيار
         }
 
-        return map;
-    }
-
-    private void processOpenGame(Uri game) {
-        String scheme = game.getScheme();
-        String path = game.getPath();
-
-        if (scheme != null) {
-            if (scheme.equals("content")) {
-                // Pass content URI as-is.
-                args = new String[]{game.toString()};
-            } else if (scheme.equals("file")) {
-                // Regular file, pass as-is.
-                args = new String[]{path};
-            }
+        if (onCreate) { 
+            if (isFused) delayedUri = game; 
+            else processOpenGame(game); 
+        } else {
+            sendUriAsDroppedFile(game); 
         }
     }
+    
+    private void processOpenGame(Uri game) { if (game.getScheme() != null && game.getScheme().equals("file")) args = new String[]{game.getPath()}; }
 }

@@ -54,6 +54,7 @@ public class GameActivity extends SDLActivity {
 
     private static GameActivity instance;
 
+    // أرقام اختبار AdMob الرسمية لضمان الأمان أثناء التطوير
     private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
     private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
     private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
@@ -279,17 +280,17 @@ public class GameActivity extends SDLActivity {
     public boolean isNativeLibsExtracted() { return (getApplicationInfo().flags & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) != 0; }
     public void sendUriAsDroppedFile(Uri uri) { SDLActivity.onNativeDropFile(uri.toString()); }
     
-    // 🌟 معالجة وفلترة الروابط بنظام الـ Intents لضمان الاستجابة الفورية والقصوى ومنع الحجب أو الخروج من اللعبة
+    // معالجة وفلترة الروابط بنظام الـ Intents لضمان الاستجابة الفورية والقصوى ومنع الحجب أو الخروج من اللعبة
     private void handleIntent(Intent intent, boolean onCreate) { 
         if (intent == null) return;
         
         Uri game = intent.getData(); 
         if (game == null) return; 
 
-        // 🔍 كاشف السجلات البرمجي لتعقب الروابط في الـ Logcat فوراً
+        // كاشف السجلات البرمجي لتعقب الروابط في الـ Logcat فوراً
         Log.d(TAG, "=== Intent URI Received: " + game.toString() + " ==="); 
 
-        // 🌟 التقاط الرابط المخصص وفك التشفير برمجياً وثبات واجهة الـ UI
+        // التقاط الرابط المخصص وفك التشفير برمجياً وثبات واجهة الـ UI
         if (game.getScheme() != null && game.getScheme().equals("admobbridge")) {
             String host = game.getHost();
             Log.d(TAG, "AdMob bridge matched successfully! Host target: " + host); 

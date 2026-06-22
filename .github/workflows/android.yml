@@ -4,12 +4,15 @@ on:
   push:
     branches: [ main ]
 
+# إعطاء صلاحية لقيت هب لتحديث فرع الروابط المباشرة
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 🌟 الحل هنا: سحب الكود مع كافة المكاتب الفرعية (Submodules) بشكل كامل
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
@@ -21,33 +24,44 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # 🌟 حل إضافي: تثبيت الـ NDK المتوافق والمستقر لضمان عدم حدوث مشاكل في الـ C++
       - name: Setup Android NDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: '25.2.9519653' # الإصدار الأكثر استقراراً لبناء محرك Love2D
+          ndk-version: '25.2.9519653'
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # تشغيل أمر البناء الدقيق الخاص بجهازك
+      # بناء نسخة الديبق المتوافقة مع جهازك
       - name: Build APK with Gradle
         run: ./gradlew assembleEmbedNoRecordDebug
 
-      # رفع الـ APK مباشرة والحصول على رابط تحميل صريح بدون Zip
-      - name: Upload APK and Get Direct Link
+      # الرفع المباشر والآمن إلى فرع مستقر داخل قيت هب لتوليد رابط مباشر وصريح
+      - name: Deploy APK to Direct Link Branch
         run: |
           APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Error: APK file not found!"
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          FILENAME=$(basename "$APK_PATH")
           
-          DOWNLOAD_LINK=$(curl --upload-file "$APK_PATH" "https://transfer.sh/$FILENAME")
+          # تجهيز مجلد الرفع المعزول
+          mkdir -p deploy_apk
+          cp "$APK_PATH" deploy_apk/app-debug.apk
+          cd deploy_apk
+          
+          # تهيئة جيت فرعي وعمل Force Push لضمان عدم تراكم الملفات القديمة وحفظ المساحة
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app-debug.apk
+          git commit -m "Build APK #${{ github.run_number }}"
+          
+          # الرفع بقوة إلى فرع مخصص للتحميل المباشر
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push --force origin HEAD:apk-direct
           
           echo "========================================================"
-          echo "🚀 رابط تحميل ملف الـ APK المباشر للديبق:"
-          echo "$DOWNLOAD_LINK"
+          echo "🚀 تم البناء والرفع بنجاح! رابط تحميل ملف الـ APK المباشر النظيف (بدون Zip):"
+          echo "https://raw.githubusercontent.com/${{ github.repository }}/apk-direct/app-debug.apk"
           echo "========================================================"

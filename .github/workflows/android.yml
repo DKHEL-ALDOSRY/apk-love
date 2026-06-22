@@ -1,11 +1,8 @@
-name: Android CI (Build APK)
+name: Build Android APK (Debug Direct Link)
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
@@ -14,25 +11,35 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive' # 👈 هذا السطر هو السحر الذي سيجلب ملفات المحرك الناقصة
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Make Gradlew Executable
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Normal NoRecord Debug APK
-        run: ./gradlew clean assembleNormalNoRecordDebug
+      # بناء نسخة الديبق الخاصة بك
+      - name: Build APK with Gradle
+        run: ./gradlew assembleEmbedNoRecordDebug
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Adawati-Game-APK
-          path: app/build/outputs/apk/normalNoRecord/debug/*.apk
-          retention-days: 7
+      # الخدعة البرمجية: رفع الـ APK مباشرة والحصول على رابط تحميل صريح بدون Zip
+      - name: Upload APK and Get Direct Link
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: APK file not found!"
+            exit 1
+          fi
+          echo "Found APK at: $APK_PATH"
+          FILENAME=$(basename "$APK_PATH")
+          
+          # رفع الملف والحصول على الرابط المباشر
+          DOWNLOAD_LINK=$(curl --upload-file "$APK_PATH" "https://transfer.sh/$FILENAME")
+          
+          echo "========================================================"
+          echo "🚀 رابط تحميل ملف الـ APK المباشر للديبق:"
+          echo "$DOWNLOAD_LINK"
+          echo "========================================================"

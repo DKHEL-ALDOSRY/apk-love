@@ -9,8 +9,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 🌟 الحل هنا: سحب الكود مع كافة المكاتب الفرعية (Submodules) بشكل كامل
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -18,14 +21,20 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # 🌟 حل إضافي: تثبيت الـ NDK المتوافق والمستقر لضمان عدم حدوث مشاكل في الـ C++
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: '25.2.9519653' # الإصدار الأكثر استقراراً لبناء محرك Love2D
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # بناء نسخة الديبق الخاصة بك
+      # تشغيل أمر البناء الدقيق الخاص بجهازك
       - name: Build APK with Gradle
         run: ./gradlew assembleEmbedNoRecordDebug
 
-      # الخدعة البرمجية: رفع الـ APK مباشرة والحصول على رابط تحميل صريح بدون Zip
+      # رفع الـ APK مباشرة والحصول على رابط تحميل صريح بدون Zip
       - name: Upload APK and Get Direct Link
         run: |
           APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
@@ -36,7 +45,6 @@ jobs:
           echo "Found APK at: $APK_PATH"
           FILENAME=$(basename "$APK_PATH")
           
-          # رفع الملف والحصول على الرابط المباشر
           DOWNLOAD_LINK=$(curl --upload-file "$APK_PATH" "https://transfer.sh/$FILENAME")
           
           echo "========================================================"

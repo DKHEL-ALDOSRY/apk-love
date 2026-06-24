@@ -36,8 +36,6 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
-import com.google.android.gms.ads.interstitial.InterstitialAd;
-import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 
 import org.libsdl.app.SDLActivity;
 
@@ -54,14 +52,12 @@ public class GameActivity extends SDLActivity {
 
     private static GameActivity instance;
 
-    // أرقام اختبار AdMob الرسمية لضمان الأمان أثناء التطوير
-    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
-    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
-    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
+    // === تم تحديث معرّفات الوحدات الإعلانية الحقيقية بنجاح ===
+    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-1235554699265943/9220707440";
+    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-1235554699265943/1919812244";
 
     private AdView mAdView;
     private RewardedAd mRewardedAd;
-    private InterstitialAd mInterstitialAd;
 
     protected Vibrator vibrator;
     protected boolean shortEdgesMode;
@@ -124,7 +120,6 @@ public class GameActivity extends SDLActivity {
             runOnUiThread(() -> {
                 loadAdMobBanner();
                 loadRewardedAd();
-                loadInterstitialAd();
             });
         });
     }
@@ -190,14 +185,12 @@ public class GameActivity extends SDLActivity {
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
                 mRewardedAd = null;
                 Log.e(TAG, "RewardedAd failed to load: " + loadAdError.getMessage());
-                runOnUiThread(() -> Toast.makeText(GameActivity.this, "فشل تحميل الفيديو. تأكد من الإنترنت.", Toast.LENGTH_SHORT).show());
             }
 
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
                 mRewardedAd = rewardedAd;
                 Log.d(TAG, "RewardedAd loaded successfully.");
-                runOnUiThread(() -> Toast.makeText(GameActivity.this, "الفيديو جاهز الآن!", Toast.LENGTH_SHORT).show());
                 mRewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                     @Override
                     public void onAdDismissedFullScreenContent() {
@@ -219,43 +212,8 @@ public class GameActivity extends SDLActivity {
                     SDLActivity.onNativeDropFile("admob://reward_earned");
                 });
             } else {
-                Toast.makeText(GameActivity.this, "الفيديو قيد التحميل، يرجى الانتظار...", Toast.LENGTH_LONG).show();
+                Toast.makeText(GameActivity.this, "الإعلان قيد التحميل الحجمي، يرجى المحاولة مجدداً خلال لحظات...", Toast.LENGTH_SHORT).show();
                 loadRewardedAd();
-            }
-        });
-    }
-
-    private void loadInterstitialAd() {
-        AdRequest adRequest = new AdRequest.Builder().build();
-        InterstitialAd.load(this, ADMOB_INTERSTITIAL_UNIT_ID, adRequest, new InterstitialAdLoadCallback() {
-            @Override
-            public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
-                mInterstitialAd = interstitialAd;
-                Log.d(TAG, "InterstitialAd loaded successfully.");
-                mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
-                    @Override
-                    public void onAdDismissedFullScreenContent() {
-                        mInterstitialAd = null;
-                        hideSystemBars();
-                        loadInterstitialAd();
-                    }
-                });
-            }
-            @Override
-            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) { 
-                mInterstitialAd = null; 
-                Log.e(TAG, "InterstitialAd failed to load: " + loadAdError.getMessage());
-            }
-        });
-    }
-
-    @Keep
-    public void showInterstitialAd() {
-        runOnUiThread(() -> {
-            if (mInterstitialAd != null) {
-                mInterstitialAd.show(GameActivity.this);
-            } else {
-                loadInterstitialAd();
             }
         });
     }
@@ -280,17 +238,14 @@ public class GameActivity extends SDLActivity {
     public boolean isNativeLibsExtracted() { return (getApplicationInfo().flags & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) != 0; }
     public void sendUriAsDroppedFile(Uri uri) { SDLActivity.onNativeDropFile(uri.toString()); }
     
-    // معالجة وفلترة الروابط بنظام الـ Intents لضمان الاستجابة الفورية والقصوى ومنع الحجب أو الخروج من اللعبة
     private void handleIntent(Intent intent, boolean onCreate) { 
         if (intent == null) return;
         
         Uri game = intent.getData(); 
         if (game == null) return; 
 
-        // كاشف السجلات البرمجي لتعقب الروابط في الـ Logcat فوراً
         Log.d(TAG, "=== Intent URI Received: " + game.toString() + " ==="); 
 
-        // التقاط الرابط المخصص وفك التشفير برمجياً وثبات واجهة الـ UI
         if (game.getScheme() != null && game.getScheme().equals("admobbridge")) {
             String host = game.getHost();
             Log.d(TAG, "AdMob bridge matched successfully! Host target: " + host); 
@@ -298,11 +253,9 @@ public class GameActivity extends SDLActivity {
             runOnUiThread(() -> {
                 if ("rewarded".equals(host)) {
                     showRewardedAd();
-                } else if ("interstitial".equals(host)) {
-                    showInterstitialAd();
                 }
             });
-            return; // إنهاء العملية هنا بنجاح لمنع اللعبة من الانخفاض أو الانهيار
+            return; 
         }
 
         if (onCreate) { 

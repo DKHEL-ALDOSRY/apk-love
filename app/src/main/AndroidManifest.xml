@@ -26,9 +26,10 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
         tools:targetApi="m"> 
+        
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-1235554699265943~7556271987"/>
     
         <activity
             android:name="org.love2d.android.GameActivity"

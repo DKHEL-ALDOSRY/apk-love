@@ -1,4 +1,4 @@
-name: Build Android APK (Debug Direct Link)
+name: Build Android APK (Release Direct Link)
 
 on:
   push:
@@ -32,36 +32,36 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # بناء نسخة الديبق المتوافقة مع جهازك
-      - name: Build APK with Gradle
-        run: ./gradlew assembleEmbedNoRecordDebug
+      # بناء نسخة الريليز المستقرة (Release) بدلاً من الديبق
+      - name: Build Release APK with Gradle
+        run: ./gradlew assembleEmbedNoRecordRelease
 
-      # الرفع المباشر والآمن إلى فرع مستقر داخل قيت هب لتوليد رابط مباشر وصريح
+      # الرفع المباشر والآمن إلى فرع مستقر داخل قيت هب لتوليد رابط مباشر وصريح للنسخة المستقرة
       - name: Deploy APK to Direct Link Branch
         run: |
-          APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk/ -name "*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "Error: APK file not found!"
+            echo "Error: Release APK file not found!"
             exit 1
           fi
           
-          # تجهيز مجلد الرفع المعزول
+          # تجهيز مجلد الرفع المعزول للنسخة المستقرة
           mkdir -p deploy_apk
-          cp "$APK_PATH" deploy_apk/app-debug.apk
+          cp "$APK_PATH" deploy_apk/app-release.apk
           cd deploy_apk
           
           # تهيئة جيت فرعي وعمل Force Push لضمان عدم تراكم الملفات القديمة وحفظ المساحة
           git init
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app-debug.apk
-          git commit -m "Build APK #${{ github.run_number }}"
+          git add app-release.apk
+          git commit -m "Build Release APK #${{ github.run_number }}"
           
           # الرفع بقوة إلى فرع مخصص للتحميل المباشر
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git push --force origin HEAD:apk-direct
           
           echo "========================================================"
-          echo "🚀 تم البناء والرفع بنجاح! رابط تحميل ملف الـ APK المباشر النظيف (بدون Zip):"
-          echo "https://raw.githubusercontent.com/${{ github.repository }}/apk-direct/app-debug.apk"
+          echo "🚀 تم البناء والرفع بنجاح! رابط تحميل ملف الـ APK الـ Release المباشر الحقيقي:"
+          echo "https://raw.githubusercontent.com/${{ github.repository }}/apk-direct/app-release.apk"
           echo "========================================================"

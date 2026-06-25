@@ -165,7 +165,8 @@ public class GameActivity extends SDLActivity {
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
             );
-            adParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            // 🌟 تم التعديل هنا ليكون في أعلى الشاشة بدلاً من الأسفل
+            adParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
             adParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
 
             if (mLayout != null) {

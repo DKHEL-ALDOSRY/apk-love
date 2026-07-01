@@ -54,7 +54,7 @@ android {
         ]
     }
 
-    // 🌟 إعادة الدالة المفقودة هنا لكي يقرأها Gradle بنجاح
+    // الدالة المساعدة لقراءة مكتبات الطرف الثالث
     def retrieveAll3pModules = { ->
         def modules = []
 
@@ -101,7 +101,8 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled false       // 🌟 إيقاف تشفير الأكواد تماماً لضمان سلامة جسر الـ JNI بين C++ والجافا
+            shrinkResources false     // 🌟 إيقاف تقليص الموارد لمنع أندرويد من حذف ملفات ومكونات AdMob تلقائياً
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
@@ -156,7 +157,8 @@ android {
         }
     }
 
-    packagingOptions {
+    // تحديث التسمية البرمجية لتتوافق مع إصدارات حزم أندرويد الحديثة (AGP 8+)
+    packaging {
         jniLibs {
             excludes += [
                 'lib/armeabi-v7a/libOpenSLES.so',
@@ -178,7 +180,7 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'com.google.oboe:oboe:1.9.3'
     
-    // 🌟 تم تصحيح التعليق ليتوافق مع لغة Gradle
+    // مكتبة إعلانات جوجل الداعمة للتحميل الآمن
     implementation 'com.google.android.gms:play-services-ads:23.0.0'
 }
 

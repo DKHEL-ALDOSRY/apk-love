@@ -27,9 +27,10 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="m"> 
         
+        <!-- معرف AdMob التجريبي الرسمي للاختبار -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-1235554699265943~7556271987"/>
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
     
         <activity
             android:name="org.love2d.android.GameActivity"
@@ -37,7 +38,7 @@
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
             android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="sensorPortrait">
             
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

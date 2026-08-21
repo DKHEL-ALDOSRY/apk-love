@@ -5,17 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.res.AssetManager;
 import android.graphics.Rect;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.DisplayCutout;
-import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -34,17 +30,14 @@ import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 
 import org.libsdl.app.SDLActivity;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 public class GameActivity extends SDLActivity {
     private static final String TAG = "GameActivity";
@@ -52,12 +45,14 @@ public class GameActivity extends SDLActivity {
 
     private static GameActivity instance;
 
-    // === تم تحديث معرّفات الوحدات الإعلانية الحقيقية بنجاح ===
-    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-1235554699265943/9220707440";
-    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-1235554699265943/1919812244";
+    // === معرفات جوجل التجريبية الرسمية للاختبار (آمنة تماماً) ===
+    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
+    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
+    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
 
     private AdView mAdView;
     private RewardedAd mRewardedAd;
+    private InterstitialAd mInterstitialAd;
 
     protected Vibrator vibrator;
     protected boolean shortEdgesMode;
@@ -119,6 +114,7 @@ public class GameActivity extends SDLActivity {
         MobileAds.initialize(this, initializationStatus -> {
             runOnUiThread(() -> {
                 loadAdMobBanner();
+                loadInterstitialAd();
                 loadRewardedAd();
             });
         });
@@ -165,7 +161,6 @@ public class GameActivity extends SDLActivity {
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
             );
-            // 🌟 تم التعديل هنا ليكون في أعلى الشاشة بدلاً من الأسفل
             adParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
             adParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
 
@@ -179,27 +174,59 @@ public class GameActivity extends SDLActivity {
         }
     }
 
+    private void loadInterstitialAd() {
+        AdRequest adRequest = new AdRequest.Builder().build();
+        InterstitialAd.load(this, ADMOB_INTERSTITIAL_UNIT_ID, adRequest,
+            new InterstitialAdLoadCallback() {
+                @Override
+                public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                    mInterstitialAd = interstitialAd;
+                    mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                        @Override
+                        public void onAdDismissedFullScreenContent() {
+                            mInterstitialAd = null;
+                            hideSystemBars();
+                            loadInterstitialAd(); // تحميل الإعلان القادم فوراً
+                        }
+                    });
+                }
+                @Override
+                public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                    mInterstitialAd = null;
+                }
+            });
+    }
+
     private void loadRewardedAd() {
         AdRequest adRequest = new AdRequest.Builder().build();
         RewardedAd.load(this, ADMOB_REWARDED_UNIT_ID, adRequest, new RewardedAdLoadCallback() {
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
                 mRewardedAd = null;
-                Log.e(TAG, "RewardedAd failed to load: " + loadAdError.getMessage());
             }
 
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
                 mRewardedAd = rewardedAd;
-                Log.d(TAG, "RewardedAd loaded successfully.");
                 mRewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                     @Override
                     public void onAdDismissedFullScreenContent() {
                         mRewardedAd = null;
                         hideSystemBars();
-                        loadRewardedAd();
+                        loadRewardedAd(); // تحميل الإعلان القادم فوراً
                     }
                 });
+            }
+        });
+    }
+
+    @Keep
+    public void showInterstitialAd() {
+        runOnUiThread(() -> {
+            if (mInterstitialAd != null) {
+                mInterstitialAd.show(GameActivity.this);
+            } else {
+                loadInterstitialAd();
             }
         });
     }
@@ -210,10 +237,11 @@ public class GameActivity extends SDLActivity {
             if (mRewardedAd != null) {
                 mRewardedAd.show(GameActivity.this, rewardItem -> {
                     Log.d(TAG, "Reward earned! Sending native callback.");
+                    // إرسال إشارة للعبة LÖVE لمنح المكافأة
                     SDLActivity.onNativeDropFile("admob://reward_earned");
                 });
             } else {
-                Toast.makeText(GameActivity.this, "الإعلان قيد التحميل الحجمي، يرجى المحاولة مجدداً خلال لحظات...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(GameActivity.this, "الإعلان قيد التحميل، حاول مجدداً.", Toast.LENGTH_SHORT).show();
                 loadRewardedAd();
             }
         });
@@ -245,15 +273,14 @@ public class GameActivity extends SDLActivity {
         Uri game = intent.getData(); 
         if (game == null) return; 
 
-        Log.d(TAG, "=== Intent URI Received: " + game.toString() + " ==="); 
-
+        // استقبال الأوامر المرسلة من اللعبة وعرض الإعلانات بناءً عليها
         if (game.getScheme() != null && game.getScheme().equals("admobbridge")) {
             String host = game.getHost();
-            Log.d(TAG, "AdMob bridge matched successfully! Host target: " + host); 
-            
             runOnUiThread(() -> {
                 if ("rewarded".equals(host)) {
                     showRewardedAd();
+                } else if ("interstitial".equals(host)) {
+                    showInterstitialAd();
                 }
             });
             return; 

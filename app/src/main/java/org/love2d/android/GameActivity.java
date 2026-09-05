@@ -16,8 +16,6 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
-import android.view.ViewGroup;
-import android.widget.RelativeLayout;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
@@ -25,8 +23,6 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 
 import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.AdView;
-import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.FullScreenContentCallback;
@@ -45,12 +41,11 @@ public class GameActivity extends SDLActivity {
 
     private static GameActivity instance;
 
-    // === معرفات جوجل التجريبية الرسمية للاختبار (آمنة تماماً) ===
-    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
-    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
-    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
+    // === ضع معرّفات الوحدات الإعلانية هنا (تأكد أنها تحتوي على علامة / وليس ~) ===
+    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-1235554699265943/7809743187"; // استبدل هذا بمعرف الوحدة البينية
+    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-1235554699265943/3870498177"; // استبدل هذا بمعرف وحدة المكافأة
+    // ==============================================================================================
 
-    private AdView mAdView;
     private RewardedAd mRewardedAd;
     private InterstitialAd mInterstitialAd;
 
@@ -113,7 +108,6 @@ public class GameActivity extends SDLActivity {
 
         MobileAds.initialize(this, initializationStatus -> {
             runOnUiThread(() -> {
-                loadAdMobBanner();
                 loadInterstitialAd();
                 loadRewardedAd();
             });
@@ -149,29 +143,6 @@ public class GameActivity extends SDLActivity {
                 );
             }
         });
-    }
-
-    private void loadAdMobBanner() {
-        try {
-            mAdView = new AdView(this);
-            mAdView.setAdSize(AdSize.BANNER);
-            mAdView.setAdUnitId(ADMOB_BANNER_UNIT_ID);
-
-            RelativeLayout.LayoutParams adParams = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT
-            );
-            adParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
-            adParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-
-            if (mLayout != null) {
-                ((ViewGroup) mLayout).addView(mAdView, adParams);
-                AdRequest adRequest = new AdRequest.Builder().build();
-                mAdView.loadAd(adRequest);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Banner Error: " + e.getMessage());
-        }
     }
 
     private void loadInterstitialAd() {
@@ -241,15 +212,15 @@ public class GameActivity extends SDLActivity {
                     SDLActivity.onNativeDropFile("admob://reward_earned");
                 });
             } else {
-                Toast.makeText(GameActivity.this, "الإعلان قيد التحميل، حاول مجدداً.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(GameActivity.this, "الإعلان غير جاهز، حاول مرة أخرى", Toast.LENGTH_SHORT).show();
                 loadRewardedAd();
             }
         });
     }
 
-    @Override protected void onDestroy() { if (mAdView != null) mAdView.destroy(); if (vibrator != null) vibrator.cancel(); super.onDestroy(); }
-    @Override protected void onPause() { if (mAdView != null) mAdView.pause(); if (vibrator != null) vibrator.cancel(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); hideSystemBars(); if (mAdView != null) mAdView.resume(); }
+    @Override protected void onDestroy() { if (vibrator != null) vibrator.cancel(); super.onDestroy(); }
+    @Override protected void onPause() { if (vibrator != null) vibrator.cancel(); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); hideSystemBars(); }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) { if (grantResults.length > 0) { if (requestCode == RECORD_AUDIO_REQUEST_CODE) { synchronized (recordAudioRequestDummy) { recordAudioRequestDummy[0] = grantResults[0]; recordAudioRequestDummy.notify(); } } else { super.onRequestPermissionsResult(requestCode, permissions, grantResults); } } }
     @Keep public boolean hasEmbeddedGame() { try { getAssets().open("main.lua").close(); return true; } catch (IOException e) { try { getAssets().open("game.love").close(); return true; } catch (IOException e2) { return false; } } }
     @Keep public void vibrate(double seconds) { if (vibrator != null) { long d = (long)(seconds * 1000.); if (android.os.Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(d, VibrationEffect.DEFAULT_AMPLITUDE)); else vibrator.vibrate(d); } }
